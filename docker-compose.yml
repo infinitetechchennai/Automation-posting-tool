@@ -1,0 +1,115 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: socialpilot_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: socialpilot
+      POSTGRES_PASSWORD: socialpilot_secret_password
+      POSTGRES_DB: socialpilot
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U socialpilot -d socialpilot"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: socialpilot_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: socialpilot_backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./storage:/app/storage
+    environment:
+      - APP_ENV=production
+      - APP_MODE=mock
+      - SECRET_KEY=socialpilot_super_secret_jwt_key_at_least_32_chars
+      - DATABASE_URL=postgresql+psycopg://socialpilot:socialpilot_secret_password@postgres:5432/socialpilot
+      - REDIS_URL=redis://redis:6379/0
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - OLLAMA_MODEL=llama3
+      - MEDIA_STORAGE_PATH=/app/storage/media
+      - TOKEN_ENCRYPTION_KEY=w1K9zL5qR8vB3xM7nY2pT4sW6uC8aE1oZ3cD5fG7hI9=
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: >
+      sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: socialpilot_celery_worker
+    restart: unless-stopped
+    volumes:
+      - ./storage:/app/storage
+    environment:
+      - APP_ENV=production
+      - APP_MODE=mock
+      - DATABASE_URL=postgresql+psycopg://socialpilot:socialpilot_secret_password@postgres:5432/socialpilot
+      - REDIS_URL=redis://redis:6379/0
+      - MEDIA_STORAGE_PATH=/app/storage/media
+      - TOKEN_ENCRYPTION_KEY=w1K9zL5qR8vB3xM7nY2pT4sW6uC8aE1oZ3cD5fG7hI9=
+    depends_on:
+      backend:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    command: celery -A app.core.celery_app.celery worker --loglevel=info
+
+  celery-beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: socialpilot_celery_beat
+    restart: unless-stopped
+    environment:
+      - APP_ENV=production
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      backend:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    command: celery -A app.core.celery_app.celery beat --loglevel=info
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: socialpilot_frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  redis_data:
