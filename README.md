@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # 🚀 SocialPilot AI — AI Social Media Content Generator & Auto Publisher
 
 > **A modern, full-stack, local-first social media marketing automation platform with ₹0 operational cost.**  
@@ -455,3 +456,6 @@ The default database is an SQLite file located at `backend/socialpilot.db`. To i
 ## 📄 License
 
 This project is licensed under the **MIT License** — you are free to modify, distribute, and use it for commercial and private projects.
+=======
+# Automation-posting-tool
+>>>>>>> 789600e876bb62f79009e96da27eef7c6e2d45cf
